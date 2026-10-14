@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { LanSimulatorEngine } from './engine/lanSimulatorEngine';
-import { RoomState, DrawStroke, ChatMessage, DiscoveredRoom } from './types/game';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { GameClient, ConnectionStatus, fetchRooms } from './network/gameClient';
+import { RoomState, ChatMessage, DiscoveredRoom } from './types/game';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import { ChatAndLeaderboard } from './components/ChatAndLeaderboard';
 import confetti from 'canvas-confetti';
@@ -16,132 +16,175 @@ import {
   ArrowRight,
   User,
   AlertTriangle,
+  Trophy,
 } from 'lucide-react';
 
+const ROOM_LIST_POLL_MS = 3000;
+
+// Shown only while not in a room; never rendered with data.
+const EMPTY_ROOM: RoomState = {
+  roomId: '',
+  settings: { roomName: '', totalRounds: 0, roundDurationSeconds: 0, maxPlayers: 0 },
+  phase: 'LOBBY',
+  currentRound: 0,
+  totalRounds: 0,
+  currentDrawerId: null,
+  secretWord: '',
+  maskedWord: '',
+  category: '',
+  timeRemaining: 0,
+  players: [],
+  strokes: [],
+  roundPointsGained: {},
+};
+
+const STATUS_LABEL: Record<ConnectionStatus, string> = {
+  connecting: 'Đang kết nối...',
+  open: 'Đã kết nối',
+  closed: 'Mất kết nối',
+};
+
 export default function App() {
-  const engine = useMemo(() => new LanSimulatorEngine(), []);
+  const client = useMemo(() => new GameClient(), []);
 
-  // Screen navigation: 'browser' -> 'lobby' -> 'game'
-  const [currentScreen, setCurrentScreen] = useState<'browser' | 'lobby' | 'game'>('browser');
-
-  const [roomState, setRoomState] = useState<RoomState>(engine.getState());
-  const [discoveredRooms, setDiscoveredRooms] = useState<DiscoveredRoom[]>(engine.getDiscoveredRooms());
+  const [joinedRoom, setJoinedRoom] = useState<RoomState | null>(null);
+  const roomState = joinedRoom ?? EMPTY_ROOM;
+  const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
+  const [discoveredRooms, setDiscoveredRooms] = useState<DiscoveredRoom[]>([]);
+  const [roomsLoaded, setRoomsLoaded] = useState<boolean>(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [activePlayerId, setActivePlayerId] = useState<string>('player_host');
   const [playerName, setPlayerName] = useState<string>('Họa Sĩ Vui Vẻ');
+
+  // Screen navigation is derived from the server state: 'browser' -> 'lobby' -> 'game'
+  const currentScreen: 'browser' | 'lobby' | 'game' = !joinedRoom
+    ? 'browser'
+    : joinedRoom.phase === 'LOBBY'
+    ? 'lobby'
+    : 'game';
 
   // Dialogs
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [showManualModal, setShowManualModal] = useState<boolean>(false);
   const [showLeaveModal, setShowLeaveModal] = useState<boolean>(false);
   const [newRoomName, setNewRoomName] = useState<string>('Phòng Gia Đình');
-  const [manualIp, setManualIp] = useState<string>('192.168.1.105');
+  const [manualCode, setManualCode] = useState<string>('');
   const [closeGuessAlert, setCloseGuessAlert] = useState<string | null>(null);
+  const [errorAlert, setErrorAlert] = useState<string | null>(null);
 
   // Room config
   const [selectedDuration, setSelectedDuration] = useState<number>(60);
   const [selectedRounds, setSelectedRounds] = useState<number>(3);
 
   useEffect(() => {
-    const unsubState = engine.subscribeState((state) => {
-      setRoomState(state);
-      if (currentScreen === 'lobby' && state.phase === 'DRAWING') {
-        setCurrentScreen('game');
-      }
-    });
+    const showError = (text: string) => {
+      setErrorAlert(text);
+      setTimeout(() => setErrorAlert(null), 3500);
+    };
 
-    const unsubRooms = engine.subscribeDiscoveredRooms((rooms) => {
-      setDiscoveredRooms(rooms);
-    });
-
-    const unsubChat = engine.subscribeChat((chat) => {
-      setMessages((prev) => [...prev, chat]);
-      if (chat.type === 'close_guess') {
-        setCloseGuessAlert(chat.text);
-        setTimeout(() => setCloseGuessAlert(null), 3000);
-      }
-    });
-
-    const unsubCorrect = engine.subscribeCorrectGuess(() => {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
-    });
-
-    const unsubRoomClosed = engine.subscribeRoomClosed((reason) => {
-      setCurrentScreen('browser');
-    });
+    const unsubs = [
+      client.onStatus.on(setConnectionStatus),
+      client.onState.on((state) => {
+        setJoinedRoom(state);
+        setMyPlayerId(client.getPlayerId());
+        if (!state) setMessages([]);
+      }),
+      client.onChat.on((chat) => {
+        setMessages((prev) => [...prev, chat]);
+        if (chat.type === 'close_guess') {
+          setCloseGuessAlert(chat.text);
+          setTimeout(() => setCloseGuessAlert(null), 3000);
+        }
+      }),
+      client.onCorrectGuess.on(() => {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      }),
+      client.onRoomClosed.on(showError),
+      client.onError.on(showError),
+    ];
 
     return () => {
-      unsubState();
-      unsubRooms();
-      unsubChat();
-      unsubCorrect();
-      unsubRoomClosed();
-      engine.destroy();
+      unsubs.forEach((unsub) => unsub());
+      client.destroy();
     };
-  }, [engine, currentScreen]);
+  }, [client]);
 
-  const activePlayer =
-    roomState.players.find((p) => p.id === activePlayerId) ||
-    roomState.players[0] || {
-      id: 'player_host',
-      name: playerName,
-      avatar: '🎨',
-      isHost: true,
-      score: 0,
-      hasGuessedCorrectly: false,
-      isConnected: true,
-      pingMs: 1,
-    };
+  const loadRooms = useCallback(() => {
+    fetchRooms()
+      .then((rooms) => {
+        setDiscoveredRooms(rooms);
+        setRoomsLoaded(true);
+      })
+      .catch(() => setRoomsLoaded(true));
+  }, []);
 
-  const isCurrentDrawer = activePlayer.id === roomState.currentDrawerId;
+  // Poll the open rooms while browsing
+  useEffect(() => {
+    if (currentScreen !== 'browser') return;
+    loadRooms();
+    const timer = setInterval(loadRooms, ROOM_LIST_POLL_MS);
+    return () => clearInterval(timer);
+  }, [currentScreen, loadRooms]);
+
+  const activePlayer = roomState.players.find((p) => p.id === myPlayerId) || {
+    id: myPlayerId ?? '',
+    name: playerName,
+    avatar: '🎨',
+    isHost: false,
+    score: 0,
+    hasGuessedCorrectly: false,
+    isConnected: true,
+    pingMs: 0,
+  };
+
+  const isCurrentDrawer = !!myPlayerId && myPlayerId === roomState.currentDrawerId;
+  const canDraw = isCurrentDrawer && roomState.phase === 'DRAWING';
   const currentDrawerPlayer = roomState.players.find(
     (p) => p.id === roomState.currentDrawerId
   );
+  const winner = [...roomState.players].sort((a, b) => b.score - a.score)[0];
 
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoomName.trim()) return;
-    engine.createNewRoom(newRoomName.trim(), playerName.trim());
-    setActivePlayerId('player_host');
+    client.createRoom(newRoomName.trim(), playerName.trim());
     setShowCreateModal(false);
-    setCurrentScreen('lobby');
   };
 
   const handleJoinRoom = (room: DiscoveredRoom) => {
-    engine.connectToRoom(room.hostIp, room.port, playerName.trim());
-    setShowManualModal(false);
-    setCurrentScreen('lobby');
+    client.joinRoom(room.code, playerName.trim());
   };
 
   const handleManualConnect = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualIp.trim()) return;
-    engine.connectToRoom(manualIp.trim(), 8080, playerName.trim());
+    if (!manualCode.trim()) return;
+    client.joinRoom(manualCode.trim(), playerName.trim());
     setShowManualModal(false);
-    setCurrentScreen('lobby');
   };
 
   const handleStartGame = () => {
-    engine.setRoomSettings({
-      roundDurationSeconds: selectedDuration,
-      totalRounds: selectedRounds,
-    });
-    engine.startGame();
-    setCurrentScreen('game');
+    client.startGame(selectedRounds, selectedDuration);
   };
 
   const handleConfirmLeave = () => {
     setShowLeaveModal(false);
-    engine.leaveRoom(activePlayer.id);
-    setCurrentScreen('browser');
+    client.leaveRoom();
   };
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
+      {/* Toast lỗi / thông báo từ server */}
+      {errorAlert && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 bg-rose-600 text-white font-bold px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-xs border border-rose-400">
+          <AlertTriangle className="w-4 h-4" />
+          <span>{errorAlert}</span>
+        </div>
+      )}
+
       {/* Toast Đoán gần đúng */}
       {closeGuessAlert && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-xs animate-bounce border border-amber-300">
@@ -159,7 +202,7 @@ export default function App() {
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setDiscoveredRooms(engine.getDiscoveredRooms())}
+                onClick={loadRooms}
                 className="p-2 rounded-full hover:bg-white/10 transition-colors"
                 title="Làm mới danh sách"
               >
@@ -169,7 +212,7 @@ export default function App() {
                 type="button"
                 onClick={() => setShowManualModal(true)}
                 className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                title="Nhập IP thủ công"
+                title="Nhập mã phòng"
               >
                 <Network className="w-5 h-5" />
               </button>
@@ -194,9 +237,13 @@ export default function App() {
                 </div>
               </div>
               <div className="text-right text-[11px] text-slate-400 shrink-0">
-                <div>IP Máy của bạn:</div>
-                <div className="font-mono font-bold text-indigo-300 text-xs">
-                  {roomState.settings.hostIp}
+                <div>Máy chủ:</div>
+                <div
+                  className={`font-bold text-xs ${
+                    connectionStatus === 'open' ? 'text-emerald-400' : 'text-amber-400'
+                  }`}
+                >
+                  {STATUS_LABEL[connectionStatus]}
                 </div>
               </div>
             </div>
@@ -206,31 +253,33 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-4 max-w-xl mx-auto w-full space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
               <span className="font-semibold text-slate-200">
-                Phòng tìm thấy trong Wi-Fi ({discoveredRooms.length})
+                Phòng đang mở ({discoveredRooms.length})
               </span>
               <button
                 type="button"
                 onClick={() => setShowManualModal(true)}
                 className="text-indigo-400 hover:underline"
               >
-                Nhập IP kết nối trực tiếp
+                Nhập mã phòng
               </button>
             </div>
 
             {discoveredRooms.length === 0 ? (
               <div className="py-20 flex flex-col items-center justify-center text-center text-slate-500">
-                <RefreshCw className="w-10 h-10 mb-3 text-slate-600 animate-spin" />
+                <RefreshCw
+                  className={`w-10 h-10 mb-3 text-slate-600 ${roomsLoaded ? '' : 'animate-spin'}`}
+                />
                 <p className="font-semibold text-slate-300 text-sm">
-                  Đang quét phòng chơi trên cổng UDP 8888...
+                  {roomsLoaded ? 'Chưa có phòng nào đang mở.' : 'Đang tải danh sách phòng...'}
                 </p>
                 <p className="text-xs mt-1 text-slate-500">
-                  Hãy chắc chắn rằng các máy cùng kết nối chung một mạng Wi-Fi.
+                  Hãy tạo phòng mới hoặc nhập mã phòng bạn bè gửi cho bạn.
                 </p>
               </div>
             ) : (
-              discoveredRooms.map((room, idx) => (
+              discoveredRooms.map((room) => (
                 <div
-                  key={idx}
+                  key={room.code}
                   className="bg-slate-900 border border-slate-800 hover:border-indigo-500/60 rounded-xl p-3.5 transition-all shadow-md flex items-center justify-between gap-3"
                 >
                   <div className="overflow-hidden">
@@ -241,7 +290,8 @@ export default function App() {
                       Chủ phòng: <strong className="text-slate-200">{room.hostName}</strong>
                     </div>
                     <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-                      ws://{room.hostIp}:{room.port}
+                      Mã: {room.code} • {room.playerCount}/{room.maxPlayers} người •{' '}
+                      {room.phase === 'LOBBY' ? 'Đang chờ' : 'Đang chơi'}
                     </div>
                   </div>
 
@@ -284,7 +334,8 @@ export default function App() {
                 {roomState.settings.roomName}
               </h1>
               <p className="text-[11px] text-indigo-200">
-                Chờ người chơi sẵn sàng • {roomState.players.length} thành viên
+                Mã phòng: <strong className="font-mono text-white">{roomState.roomId}</strong> •{' '}
+                {roomState.players.length} thành viên
               </p>
             </div>
 
@@ -446,12 +497,10 @@ export default function App() {
             <div className="text-center">
               <div className="font-mono text-sm tracking-widest font-black text-amber-300">
                 {roomState.phase === 'DRAWING'
-                  ? isCurrentDrawer
-                    ? `${roomState.secretWord} (${roomState.category})`
-                    : `${roomState.maskedWord} (${roomState.category})`
+                  ? `${roomState.secretWord || roomState.maskedWord} (${roomState.category})`
                   : roomState.phase === 'ROUND_SUMMARY'
                   ? `${roomState.secretWord} (Đáp án)`
-                  : '...'}
+                  : 'Kết thúc'}
               </div>
             </div>
 
@@ -471,10 +520,10 @@ export default function App() {
             {/* Drawing Canvas Area (Left 8 cols) */}
             <div className="lg:col-span-8 flex flex-col min-h-0">
               <DrawingCanvas
-                isDrawer={isCurrentDrawer}
+                isDrawer={canDraw}
                 strokes={roomState.strokes}
-                onAddStroke={(s) => engine.addStroke(s, activePlayer.id)}
-                onClearCanvas={() => engine.clearCanvas(activePlayer.id)}
+                onAddStroke={(s) => client.addStroke(s)}
+                onClearCanvas={() => client.clearCanvas()}
                 drawerName={currentDrawerPlayer?.name}
                 secretWord={isCurrentDrawer ? roomState.secretWord : undefined}
               />
@@ -487,11 +536,46 @@ export default function App() {
                 messages={messages}
                 currentDrawerId={roomState.currentDrawerId}
                 activePlayerId={activePlayer.id}
-                onSendGuess={(t) => engine.submitGuess(activePlayer.id, t)}
-                isDrawer={isCurrentDrawer}
+                onSendGuess={(t) => client.sendGuess(t)}
+                isDrawer={canDraw}
               />
             </div>
           </div>
+
+          {/* Game Over overlay */}
+          {roomState.phase === 'GAME_OVER' && (
+            <div className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4 text-center">
+                <Trophy className="w-10 h-10 text-amber-400 mx-auto" />
+                <h3 className="text-base font-bold text-white">Trò chơi kết thúc!</h3>
+                {winner && (
+                  <p className="text-sm text-slate-300">
+                    Người thắng: <strong className="text-amber-300">{winner.avatar} {winner.name}</strong> ({winner.score} đ)
+                  </p>
+                )}
+                <div className="flex items-center justify-center gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveModal(true)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs"
+                  >
+                    Rời phòng
+                  </button>
+                  {activePlayer.isHost ? (
+                    <button
+                      type="button"
+                      onClick={() => client.playAgain()}
+                      className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
+                    >
+                      Chơi ván mới
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">Đợi chủ phòng mở ván mới...</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -548,22 +632,22 @@ export default function App() {
           >
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Network className="w-5 h-5 text-amber-400" />
-              Kết nối IP thủ công
+              Vào phòng bằng mã
             </h3>
 
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Nhập IP của máy Host (dành cho trường hợp Router Wi-Fi chặn gói UDP Broadcast):
+              Nhập mã phòng mà chủ phòng đã gửi cho bạn:
             </p>
 
             <div>
               <label className="block text-slate-300 text-xs font-medium mb-1">
-                Địa chỉ IP của Host:
+                Mã phòng:
               </label>
               <input
                 type="text"
-                value={manualIp}
-                onChange={(e) => setManualIp(e.target.value)}
-                placeholder="192.168.1.105"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+                placeholder="VD: AB12CD"
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
               />
             </div>

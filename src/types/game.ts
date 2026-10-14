@@ -9,7 +9,7 @@ export interface Player {
   pingMs: number;
 }
 
-export type GamePhase = 'LOBBY' | 'STARTING' | 'SELECTING_WORD' | 'DRAWING' | 'ROUND_SUMMARY' | 'GAME_OVER';
+export type GamePhase = 'LOBBY' | 'DRAWING' | 'ROUND_SUMMARY' | 'GAME_OVER';
 
 export interface NormalizedPoint {
   x: number; // 0.0 to 1.0
@@ -31,53 +31,62 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   type: 'chat' | 'system' | 'correct_guess' | 'close_guess';
-  maskedForGuessers?: boolean;
 }
 
 export interface RoomSettings {
   roomName: string;
-  port: number;
-  hostIp: string;
   totalRounds: number;
   roundDurationSeconds: number; // 60 or 90
   maxPlayers: number;
 }
 
 export interface RoomState {
-  roomId: string;
+  roomId: string; // room code, shared with friends to join
   settings: RoomSettings;
   phase: GamePhase;
   currentRound: number;
   totalRounds: number;
   currentDrawerId: string | null;
-  secretWord: string;
+  secretWord: string; // empty for players who must not see it yet
   maskedWord: string; // e.g. "_ _ _ _"
   category: string;
   timeRemaining: number;
   players: Player[];
   strokes: DrawStroke[];
-  lastWinnerId?: string;
   roundPointsGained: Record<string, number>;
 }
 
-export interface NetworkPacket {
-  id: string;
-  timestamp: number;
-  protocol: 'UDP_BROADCAST' | 'WEBSOCKET';
-  direction: 'INCOMING' | 'OUTGOING' | 'SERVER_BROADCAST';
-  action: string;
-  sender: string;
-  payload: any;
-  byteSize: number;
-}
+// Room state as sent by the server; strokes travel separately (CANVAS / DRAW_STROKE).
+export type RoomSnapshot = Omit<RoomState, 'strokes'>;
 
 export interface DiscoveredRoom {
+  code: string;
   roomName: string;
   hostName: string;
-  hostIp: string;
-  port: number;
   playerCount: number;
   maxPlayers: number;
   phase: GamePhase;
-  lastSeen: number;
 }
+
+// Client -> Server
+export type ClientMessage =
+  | { action: 'CREATE_ROOM'; roomName: string; playerName: string }
+  | { action: 'JOIN_ROOM'; roomCode: string; playerName: string }
+  | { action: 'START_GAME'; totalRounds: number; roundDurationSeconds: number }
+  | { action: 'DRAW_STROKE'; stroke: DrawStroke }
+  | { action: 'CLEAR_CANVAS' }
+  | { action: 'CHAT_GUESS'; text: string }
+  | { action: 'PLAY_AGAIN' }
+  | { action: 'LEAVE_ROOM' };
+
+// Server -> Client
+export type ServerMessage =
+  | { action: 'JOINED'; roomCode: string; playerId: string }
+  | { action: 'ROOM_STATE'; state: RoomSnapshot }
+  | { action: 'TICK'; timeRemaining: number }
+  | { action: 'CANVAS'; strokes: DrawStroke[] }
+  | { action: 'DRAW_STROKE'; stroke: DrawStroke }
+  | { action: 'CHAT'; message: ChatMessage }
+  | { action: 'CORRECT_GUESS'; playerId: string }
+  | { action: 'ROOM_CLOSED'; reason: string }
+  | { action: 'ERROR'; message: string };
