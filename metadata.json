@@ -1,0 +1,6 @@
+{
+  "name": "Draw & Guess LAN Architect & Simulator",
+  "description": "Cross-platform Flutter LAN multiplayer Draw & Guess game architecture, interactive live simulator, and production-ready source code hub.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
