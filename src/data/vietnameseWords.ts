@@ -1,86 +1,118 @@
 export interface WordItem {
   word: string;
   category: string;
-  hint: string;
-  difficulty: 'dễ' | 'vừa' | 'khó';
 }
 
-export const VIETNAMESE_WORD_BANK: WordItem[] = [
-  // Động vật
-  { word: 'Con mèo', category: 'Động vật', hint: 'Kêu meo meo, thích bắt chuột', difficulty: 'dễ' },
-  { word: 'Con chó', category: 'Động vật', hint: 'Bạn thân của con người, giữ nhà', difficulty: 'dễ' },
-  { word: 'Con voi', category: 'Động vật', hint: 'Có vòi dài và đôi ngà trắng', difficulty: 'dễ' },
-  { word: 'Hươu cao cổ', category: 'Động vật', hint: 'Cổ rất dài, ăn lá trên ngọn cây', difficulty: 'vừa' },
-  { word: 'Cá heo', category: 'Động vật', hint: 'Động vật biển thông minh, biết biểu diễn', difficulty: 'vừa' },
-  { word: 'Chim cánh cụt', category: 'Động vật', hint: 'Sống ở Nam Cực, không biết bay', difficulty: 'vừa' },
-  { word: 'Con sóc', category: 'Động vật', hint: 'Thích ăn hạt dẻ, đuôi xù', difficulty: 'dễ' },
-  { word: 'Con nhện', category: 'Động vật', hint: 'Giăng tơ bắt mồi, có 8 chân', difficulty: 'dễ' },
-  { word: 'Con ong', category: 'Động vật', hint: 'Hút mật hoa, chăm chỉ làm việc', difficulty: 'dễ' },
-  { word: 'Khủng long', category: 'Động vật', hint: 'Sinh vật thời tiền sử đã tuyệt chủng', difficulty: 'vừa' },
+const WORDS_BY_CATEGORY: Record<string, string[]> = {
+  'Động vật': [
+    'Con mèo', 'Con chó', 'Con voi', 'Hươu cao cổ', 'Cá heo', 'Chim cánh cụt', 'Con sóc', 'Con nhện',
+    'Con ong', 'Khủng long', 'Con gà', 'Con vịt', 'Con lợn', 'Con bò', 'Con trâu', 'Con ngựa',
+    'Con dê', 'Con cừu', 'Con thỏ', 'Con chuột', 'Con hổ', 'Sư tử', 'Con khỉ', 'Con gấu',
+    'Gấu trúc', 'Con cáo', 'Con sói', 'Ngựa vằn', 'Tê giác', 'Hà mã', 'Lạc đà', 'Chuột túi',
+    'Con rùa', 'Con rắn', 'Cá sấu', 'Con ếch', 'Con cua', 'Con tôm', 'Bạch tuộc', 'Cá mập',
+    'Cá voi', 'Sứa biển', 'Sao biển', 'Con bướm', 'Con kiến', 'Con muỗi', 'Ốc sên', 'Con cú',
+    'Đại bàng', 'Con vẹt', 'Chim công', 'Hồng hạc', 'Con dơi', 'Con nhím',
+  ],
+  'Ẩm thực': [
+    'Bánh mì', 'Phở bò', 'Cà phê sữa đá', 'Trà sữa trân châu', 'Kem ốc quế', 'Pizza', 'Trứng ốp la',
+    'Củ khoai lang', 'Bánh chưng', 'Bánh xèo', 'Bún chả', 'Cơm tấm', 'Gỏi cuốn', 'Bánh bao',
+    'Xôi gấc', 'Chè ba màu', 'Hamburger', 'Xúc xích', 'Mì tôm', 'Bánh kem', 'Bánh trung thu',
+    'Nồi lẩu', 'Gà rán', 'Khoai tây chiên', 'Bỏng ngô', 'Kẹo mút', 'Sô cô la', 'Bánh quy',
+    'Quả chuối', 'Quả táo', 'Quả dưa hấu', 'Quả dứa', 'Quả cam', 'Quả xoài', 'Quả dừa',
+    'Quả nho', 'Quả dâu tây', 'Sầu riêng', 'Thanh long', 'Quả ớt', 'Cà rốt', 'Bắp ngô',
+    'Cây nấm', 'Quả trứng',
+  ],
+  'Đồ vật': [
+    'Chiếc ô', 'Điện thoại', 'Đồng hồ cát', 'Kính râm', 'Bóng bay', 'Cái kéo', 'Cái bút chì',
+    'Quyển sách', 'Cái ghế', 'Cái bàn', 'Cái giường', 'Cái gối', 'Bóng đèn', 'Cây nến',
+    'Chìa khóa', 'Ổ khóa', 'Cái cốc', 'Cái thìa', 'Đôi đũa', 'Con dao', 'Cái nồi', 'Cái chảo',
+    'Ấm trà', 'Bàn chải đánh răng', 'Kem đánh răng', 'Cái lược', 'Cái gương', 'Máy giặt',
+    'Tủ lạnh', 'Ti vi', 'Quạt điện', 'Điều hòa', 'Máy tính', 'Bàn phím', 'Con chuột máy tính',
+    'Máy ảnh', 'Tai nghe', 'Cái ba lô', 'Cái ví', 'Cái túi xách', 'Cái chổi', 'Thùng rác',
+    'Cái thang', 'Cái búa', 'Cái đinh', 'Cục pin', 'Phong bì', 'Món quà', 'Cái khung ảnh',
+    'Cái đồng hồ báo thức', 'Cái nhiệt kế',
+  ],
+  'Phương tiện': [
+    'Máy bay', 'Tàu hỏa', 'Thuyền buồm', 'Xe đạp', 'Xe máy', 'Ô tô', 'Xe buýt', 'Xe tải',
+    'Xe cứu thương', 'Xe cứu hỏa', 'Xe cảnh sát', 'Trực thăng', 'Tàu ngầm', 'Tên lửa',
+    'Khinh khí cầu', 'Xe xích lô', 'Ca nô', 'Du thuyền', 'Xe lăn', 'Ván trượt', 'Xe ủi',
+    'Máy cày', 'Taxi', 'Đĩa bay',
+  ],
+  'Thiên nhiên': [
+    'Cầu vồng', 'Núi lửa', 'Mặt trời', 'Bãi biển', 'Mặt trăng', 'Ngôi sao', 'Đám mây', 'Tia sét',
+    'Bông tuyết', 'Người tuyết', 'Cơn mưa', 'Cái cây', 'Bông hoa', 'Hoa sen', 'Hoa hướng dương',
+    'Cây xương rồng', 'Cây dừa', 'Lá cây', 'Ngọn núi', 'Dòng sông', 'Thác nước', 'Hòn đảo',
+    'Sa mạc', 'Hang động', 'Sao chổi', 'Trái Đất', 'Ngọn lửa', 'Cơn lốc xoáy',
+  ],
+  'Địa điểm & Công trình': [
+    'Ngọn hải đăng', 'Cối xay gió', 'Ngôi nhà', 'Trường học', 'Bệnh viện', 'Chợ', 'Siêu thị',
+    'Công viên', 'Sân bay', 'Nhà ga', 'Cây cầu', 'Lâu đài', 'Kim tự tháp', 'Tháp Eiffel',
+    'Chùa Một Cột', 'Sở thú', 'Rạp chiếu phim', 'Thư viện', 'Bể bơi', 'Sân bóng đá', 'Nhà thờ',
+    'Bến xe', 'Cột đèn giao thông', 'Đèn lồng', 'Hàng rào', 'Giếng nước',
+  ],
+  'Nghề nghiệp': [
+    'Bác sĩ', 'Y tá', 'Giáo viên', 'Cảnh sát', 'Lính cứu hỏa', 'Đầu bếp', 'Phi công',
+    'Nông dân', 'Ngư dân', 'Thợ xây', 'Thợ cắt tóc', 'Ca sĩ', 'Họa sĩ', 'Nhiếp ảnh gia',
+    'Phi hành gia', 'Thám tử', 'Ảo thuật gia', 'Chú hề', 'Người máy', 'Shipper',
+  ],
+  'Thể thao & Hoạt động': [
+    'Bóng đá', 'Bóng rổ', 'Cầu lông', 'Bơi lội', 'Chạy bộ', 'Đá cầu', 'Nhảy dây', 'Bóng chuyền',
+    'Quần vợt', 'Võ thuật', 'Cử tạ', 'Lướt sóng', 'Trượt tuyết', 'Leo núi', 'Câu cá', 'Cắm trại',
+    'Thả diều', 'Đánh răng', 'Ngủ trưa', 'Nấu ăn', 'Hát karaoke', 'Chụp ảnh tự sướng', 'Đi chợ',
+    'Tập yoga', 'Kéo co',
+  ],
+  'Trang phục & Phụ kiện': [
+    'Áo dài', 'Nón lá', 'Mũ bảo hiểm', 'Đôi giày', 'Đôi dép', 'Cái váy', 'Quần jean',
+    'Áo mưa', 'Cà vạt', 'Khăn quàng cổ', 'Găng tay', 'Đôi tất', 'Chiếc nhẫn', 'Vòng cổ',
+    'Đồng hồ đeo tay', 'Vương miện', 'Mặt nạ', 'Khẩu trang', 'Thắt lưng', 'Bộ vest',
+  ],
+  'Âm nhạc & Giải trí': [
+    'Cây đàn ghi ta', 'Đàn piano', 'Cái trống', 'Kèn trumpet', 'Đàn violin', 'Cây sáo', 'Micro',
+    'Loa', 'Con diều', 'Con quay', 'Búp bê', 'Gấu bông', 'Xếp hình', 'Cầu trượt', 'Xích đu',
+    'Bộ bài', 'Xúc xắc', 'Bàn cờ vua', 'Pháo hoa', 'Đu quay',
+  ],
+  'Cơ thể & Cảm xúc': [
+    'Con mắt', 'Cái mũi', 'Cái miệng', 'Cái tai', 'Bàn tay', 'Bàn chân', 'Trái tim', 'Bộ não',
+    'Cái răng', 'Mái tóc', 'Bộ râu', 'Nụ cười', 'Giọt nước mắt', 'Cái hắt xì', 'Cái ngáp',
+    'Bộ xương',
+  ],
+  'Lễ hội & Văn hóa': [
+    'Tết Nguyên Đán', 'Bao lì xì', 'Cây nêu', 'Hoa mai', 'Hoa đào', 'Mâm ngũ quả', 'Múa lân',
+    'Ông già Noel', 'Cây thông Noel', 'Bí ngô Halloween', 'Đèn ông sao', 'Rước đèn',
+    'Đám cưới', 'Sinh nhật', 'Tượng Nữ thần Tự do', 'Con rồng', 'Kỳ lân', 'Nàng tiên cá',
+    'Ma cà rồng', 'Phù thủy',
+  ],
+};
 
-  // Đồ ăn & Đồ uống
-  { word: 'Bánh mì', category: 'Ẩm thực', hint: 'Món ăn đường phố nổi tiếng Việt Nam', difficulty: 'dễ' },
-  { word: 'Phở bò', category: 'Ẩm thực', hint: 'Món nước truyền thống với bánh phở và thịt bò', difficulty: 'dễ' },
-  { word: 'Cà phê sữa đá', category: 'Ẩm thực', hint: 'Đồ uống phổ biến buổi sáng ở Sài Gòn', difficulty: 'vừa' },
-  { word: 'Trà sữa trân châu', category: 'Ẩm thực', hint: 'Món khoái khẩu của giới trẻ có viên trân châu', difficulty: 'vừa' },
-  { word: 'Kem ốc quế', category: 'Ẩm thực', hint: 'Mát lạnh, đựng trong bánh quế giòn', difficulty: 'dễ' },
-  { word: 'Pizza', category: 'Ẩm thực', hint: 'Bánh tròn nướng phủ phô mai kiểu Ý', difficulty: 'dễ' },
-  { word: 'Trứng ốp la', category: 'Ẩm thực', hint: 'Món ăn sáng chiên trứng lòng đào', difficulty: 'dễ' },
-  { word: 'Củ khoai lang', category: 'Ẩm thực', hint: 'Có thể luộc, nướng thơm lừng vào mùa đông', difficulty: 'dễ' },
+export const VIETNAMESE_WORD_BANK: WordItem[] = Object.entries(WORDS_BY_CATEGORY).flatMap(
+  ([category, words]) => words.map((word) => ({ word, category }))
+);
 
-  // Đồ vật & Thiết bị
-  { word: 'Chiếc ô', category: 'Đồ vật', hint: 'Dùng che nắng và che mưa', difficulty: 'dễ' },
-  { word: 'Điện thoại', category: 'Đồ vật', hint: 'Dùng để nghe gọi, nhắn tin, lướt mạng', difficulty: 'dễ' },
-  { word: 'Máy bay', category: 'Phương tiện', hint: 'Bay trên bầu trời, chở khách liên lục địa', difficulty: 'dễ' },
-  { word: 'Tàu hỏa', category: 'Phương tiện', hint: 'Chạy trên đường ray xình xịch', difficulty: 'dễ' },
-  { word: 'Thuyền buồm', category: 'Phương tiện', hint: 'Lướt sóng nhờ sức gió thổi vào cánh buồm', difficulty: 'vừa' },
-  { word: 'Xe đạp', category: 'Phương tiện', hint: 'Phương tiện 2 bánh dùng bàn đạp', difficulty: 'dễ' },
-  { word: 'Đồng hồ cát', category: 'Đồ vật', hint: 'Đo thời gian bằng dòng cát chảy', difficulty: 'vừa' },
-  { word: 'Cây đàn ghi ta', category: 'Đồ vật', hint: 'Nhạc cụ dây gảy bằng tay', difficulty: 'vừa' },
-  { word: 'Kính râm', category: 'Đồ vật', hint: 'Đeo để bảo vệ mắt khỏi ánh nắng gắt', difficulty: 'dễ' },
-  { word: 'Bóng bay', category: 'Đồ vật', hint: 'Bơm khí heli bay lơ lửng, nhiều màu', difficulty: 'dễ' },
-
-  // Thiên nhiên & Cảnh quan
-  { word: 'Cầu vồng', category: 'Thiên nhiên', hint: 'Bảy sắc xuất hiện sau cơn mưa', difficulty: 'dễ' },
-  { word: 'Núi lửa', category: 'Thiên nhiên', hint: 'Phun trào nham thạch đỏ rực', difficulty: 'vừa' },
-  { word: 'Mặt trời', category: 'Thiên nhiên', hint: 'Chiếu sáng ban ngày, toả nhiệt', difficulty: 'dễ' },
-  { word: 'Bãi biển', category: 'Thiên nhiên', hint: 'Có cát trắng, hàng dừa và sóng vỗ', difficulty: 'vừa' },
-  { word: 'Ngọn hải đăng', category: 'Kiến trúc', hint: 'Tháp đèn rọi sáng dẫn đường cho tàu thuyền ban đêm', difficulty: 'khó' },
-  { word: 'Cối xay gió', category: 'Kiến trúc', hint: 'Cánh quạt khổng lồ quay đón gió ở Hà Lan', difficulty: 'khó' }
-];
+export const CUSTOM_WORD_CATEGORY = 'Người vẽ tự đặt';
 
 export function normalizeText(text: string): string {
   if (!text) return '';
   return text
+    .normalize('NFC')
     .toLowerCase()
     .trim()
-    .normalize('NFC')
     .replace(/\s+/g, ' ');
 }
 
-export function removeVietnameseAccents(text: string): string {
-  let result = normalizeText(text);
-  const patterns: [RegExp, string][] = [
-    [/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a'],
-    [/[èéẹẻẽêềếệểễ]/g, 'e'],
-    [/[ìíịỉĩ]/g, 'i'],
-    [/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o'],
-    [/[ùúụủũưừứựửữ]/g, 'u'],
-    [/[ỳýỵỷỹ]/g, 'y'],
-    [/đ/g, 'd'],
-    [/[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴ]/g, 'A'],
-    [/[ÈÉẸẺẼÊỀẾỆỂỄ]/g, 'E'],
-    [/[ÌÍỊỈĨ]/g, 'I'],
-    [/[ÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠ]/g, 'O'],
-    [/[ÙÚỤỦŨƯỪỨỰỬỮ]/g, 'U'],
-    [/[ỲÝỴỶỸ]/g, 'Y'],
-    [/Đ/g, 'D'],
-  ];
+/** Validates a word typed by the drawer; returns the cleaned word or null. */
+export function cleanCustomWord(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const word = input.normalize('NFC').trim().replace(/\s+/g, ' ');
+  if (word.length < 2 || word.length > 30) return null;
+  if (!/^[\p{L}\p{M} ]+$/u.test(word)) return null;
+  return word;
+}
 
-  for (const [pattern, replacement] of patterns) {
-    result = result.replace(pattern, replacement);
-  }
-  return result;
+export function removeVietnameseAccents(text: string): string {
+  return normalizeText(text)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd');
 }
 
 export function calculateLevenshtein(s1: string, s2: string): number {
@@ -107,33 +139,23 @@ export function calculateLevenshtein(s1: string, s2: string): number {
 export interface GuessCheckResult {
   isCorrect: boolean;
   isClose: boolean;
-  feedback?: string;
 }
 
 export function checkAnswer(guess: string, targetWord: string): GuessCheckResult {
   const normGuess = normalizeText(guess);
   const normTarget = normalizeText(targetWord);
 
-  // 1. So khớp chính xác có dấu
+  // Đúng: chỉ khi khớp chính xác (có dấu) sau khi chuyển về chữ thường.
+  // "chó", "chó con", "con cho" đều KHÔNG đúng với "con chó".
   if (normGuess === normTarget) {
     return { isCorrect: true, isClose: false };
   }
 
-  // 2. So khớp chính xác không dấu
-  const unaccentedGuess = removeVietnameseAccents(normGuess);
-  const unaccentedTarget = removeVietnameseAccents(normTarget);
-
-  if (unaccentedGuess === unaccentedTarget) {
-    return { isCorrect: true, isClose: false };
-  }
-
-  // 3. So khớp gần đúng (Levenshtein Distance <= 1 trên chuỗi không dấu)
-  // Chỉ áp dụng khi từ khóa có độ dài >= 3 ký tự để tránh báo nhầm từ 1-2 ký tự
-  if (unaccentedTarget.length >= 3) {
-    const dist = calculateLevenshtein(unaccentedGuess, unaccentedTarget);
-    if (dist === 1) {
-      return { isCorrect: false, isClose: true, feedback: 'Đoán gần đúng rồi!' };
-    }
+  // Gần đúng: bỏ dấu đi thì trùng khớp hoặc chỉ lệch 1 ký tự (với từ khóa >= 3 ký tự).
+  const plainGuess = removeVietnameseAccents(normGuess);
+  const plainTarget = removeVietnameseAccents(normTarget);
+  if (plainGuess === plainTarget || (plainTarget.length >= 3 && calculateLevenshtein(plainGuess, plainTarget) <= 1)) {
+    return { isCorrect: false, isClose: true };
   }
 
   return { isCorrect: false, isClose: false };

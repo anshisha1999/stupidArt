@@ -168,6 +168,14 @@ export class GameClient {
     this.send({ action: 'START_GAME', totalRounds, roundDurationSeconds });
   }
 
+  chooseRandomWord() {
+    this.send({ action: 'CHOOSE_WORD', mode: 'random' });
+  }
+
+  chooseCustomWord(word: string) {
+    this.send({ action: 'CHOOSE_WORD', mode: 'custom', word });
+  }
+
   addStroke(stroke: DrawStroke) {
     // The server does not echo strokes back to the drawer, so render it locally right away.
     if (this.send({ action: 'DRAW_STROKE', stroke }) && this.state) {

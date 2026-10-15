@@ -9,7 +9,7 @@ export interface Player {
   pingMs: number;
 }
 
-export type GamePhase = 'LOBBY' | 'DRAWING' | 'ROUND_SUMMARY' | 'GAME_OVER';
+export type GamePhase = 'LOBBY' | 'CHOOSING_WORD' | 'DRAWING' | 'ROUND_SUMMARY' | 'GAME_OVER';
 
 export interface NormalizedPoint {
   x: number; // 0.0 to 1.0
@@ -73,6 +73,8 @@ export type ClientMessage =
   | { action: 'CREATE_ROOM'; roomName: string; playerName: string }
   | { action: 'JOIN_ROOM'; roomCode: string; playerName: string }
   | { action: 'START_GAME'; totalRounds: number; roundDurationSeconds: number }
+  | { action: 'CHOOSE_WORD'; mode: 'random' }
+  | { action: 'CHOOSE_WORD'; mode: 'custom'; word: string }
   | { action: 'DRAW_STROKE'; stroke: DrawStroke }
   | { action: 'CLEAR_CANVAS' }
   | { action: 'CHAT_GUESS'; text: string }

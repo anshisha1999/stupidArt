@@ -1,6 +1,6 @@
 {
-  "name": "Draw & Guess LAN Architect & Simulator",
-  "description": "Cross-platform Flutter LAN multiplayer Draw & Guess game architecture, interactive live simulator, and production-ready source code hub.",
+  "name": "Họa Sĩ Tồi",
+  "description": "Game vẽ hình đoán chữ nhiều người chơi: một người vẽ, cả phòng đoán từ khóa.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

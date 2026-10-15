@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { GameClient, ConnectionStatus, fetchRooms } from './network/gameClient';
 import { RoomState, ChatMessage, DiscoveredRoom } from './types/game';
+import { cleanCustomWord } from './data/vietnameseWords';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import { ChatAndLeaderboard } from './components/ChatAndLeaderboard';
 import confetti from 'canvas-confetti';
@@ -69,6 +70,7 @@ export default function App() {
   const [showLeaveModal, setShowLeaveModal] = useState<boolean>(false);
   const [newRoomName, setNewRoomName] = useState<string>('Phòng Gia Đình');
   const [manualCode, setManualCode] = useState<string>('');
+  const [customWord, setCustomWord] = useState<string>('');
   const [closeGuessAlert, setCloseGuessAlert] = useState<string | null>(null);
   const [errorAlert, setErrorAlert] = useState<string | null>(null);
 
@@ -112,6 +114,11 @@ export default function App() {
       client.destroy();
     };
   }, [client]);
+
+  // A half-typed custom word must not carry over to a later turn.
+  useEffect(() => {
+    if (roomState.phase !== 'CHOOSING_WORD') setCustomWord('');
+  }, [roomState.phase]);
 
   const loadRooms = useCallback(() => {
     fetchRooms()
@@ -170,6 +177,13 @@ export default function App() {
     client.startGame(selectedRounds, selectedDuration);
   };
 
+  const handleCustomWord = (e: React.FormEvent) => {
+    e.preventDefault();
+    const word = cleanCustomWord(customWord);
+    if (word) client.chooseCustomWord(word);
+  };
+  const isCustomWordValid = cleanCustomWord(customWord) !== null;
+
   const handleConfirmLeave = () => {
     setShowLeaveModal(false);
     client.leaveRoom();
@@ -198,7 +212,7 @@ export default function App() {
         <div className="flex flex-col h-full">
           {/* AppBar */}
           <header className="flex items-center justify-between px-4 py-3 bg-indigo-700 text-white shadow-md">
-            <h1 className="text-base font-bold tracking-wide">Draw &amp; Guess LAN</h1>
+            <h1 className="text-base font-bold tracking-wide">Họa Sĩ Tồi</h1>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -496,7 +510,9 @@ export default function App() {
             {/* Secret Word Display */}
             <div className="text-center">
               <div className="font-mono text-sm tracking-widest font-black text-amber-300">
-                {roomState.phase === 'DRAWING'
+                {roomState.phase === 'CHOOSING_WORD'
+                  ? 'Đang chọn từ khóa...'
+                  : roomState.phase === 'DRAWING'
                   ? `${roomState.secretWord || roomState.maskedWord} (${roomState.category})`
                   : roomState.phase === 'ROUND_SUMMARY'
                   ? `${roomState.secretWord} (Đáp án)`
@@ -541,6 +557,67 @@ export default function App() {
               />
             </div>
           </div>
+
+          {/* Choosing word: drawer picks, others wait */}
+          {roomState.phase === 'CHOOSING_WORD' &&
+            (isCurrentDrawer ? (
+              <div className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-white">Lượt bạn vẽ — chọn từ khóa</h3>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-900/60 text-indigo-100">
+                      {roomState.timeRemaining}s
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => client.chooseRandomWord()}
+                    className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold"
+                  >
+                    Để hệ thống chọn
+                  </button>
+
+                  <form onSubmit={handleCustomWord} className="space-y-2 pt-3 border-t border-slate-800">
+                    <label className="block text-slate-300 text-xs font-medium">Hoặc tự viết từ khóa:</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={customWord}
+                        onChange={(e) => setCustomWord(e.target.value)}
+                        maxLength={30}
+                        placeholder="VD: Con chó"
+                        className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!isCustomWordValid}
+                        className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold"
+                      >
+                        Dùng từ này
+                      </button>
+                    </div>
+                  </form>
+
+                  <p className="text-[11px] text-slate-500">
+                    Chỉ gồm chữ cái và khoảng trắng, dài 2–30 ký tự. Hết giờ mà chưa chọn, hệ thống sẽ tự
+                    chọn từ khóa cho bạn.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveModal(true)}
+                    className="w-full py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs"
+                  >
+                    Rời phòng
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="pointer-events-none fixed top-16 left-1/2 -translate-x-1/2 z-30 bg-slate-900/90 border border-slate-700 text-slate-200 text-xs px-4 py-2 rounded-xl shadow-xl">
+                {currentDrawerPlayer?.name} đang chọn từ khóa... ({roomState.timeRemaining}s)
+              </div>
+            ))}
 
           {/* Game Over overlay */}
           {roomState.phase === 'GAME_OVER' && (

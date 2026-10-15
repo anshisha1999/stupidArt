@@ -7,7 +7,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import {
   VIETNAMESE_WORD_BANK,
   WordItem,
+  CUSTOM_WORD_CATEGORY,
   checkAnswer,
+  cleanCustomWord,
   generateMaskedWord,
 } from './src/data/vietnameseWords';
 import type {
@@ -29,6 +31,7 @@ const port = Number(process.env.PORT) || 3000;
 
 const MAX_PLAYERS = 8;
 const SUMMARY_DELAY_MS = 5000;
+const CHOOSE_WORD_SECONDS = 15;
 const HEARTBEAT_MS = 5000;
 const AVATARS = ['🎨', '🚀', '🐰', '🐼', '🦊', '🐸', '🐯', '🦄'];
 
@@ -54,6 +57,7 @@ interface GameRoom {
   currentDrawerId: string | null;
   drawQueue: string[]; // players still to draw in the current round
   word: WordItem | null;
+  usedWords: Set<string>; // bank words already played in this room
   strokes: DrawStroke[];
   roundPointsGained: Record<string, number>;
   players: Map<WebSocket, PlayerSession>;
@@ -190,9 +194,15 @@ function clearRoomTimers(room: GameRoom) {
 
 // ---------- game flow ----------
 
-function pickWord(previous: WordItem | null): WordItem {
-  const pool = VIETNAMESE_WORD_BANK.filter((w) => w !== previous);
-  return pool[Math.floor(Math.random() * pool.length)];
+function pickWord(room: GameRoom): WordItem {
+  let pool = VIETNAMESE_WORD_BANK.filter((w) => !room.usedWords.has(w.word));
+  if (pool.length === 0) {
+    room.usedWords.clear();
+    pool = VIETNAMESE_WORD_BANK;
+  }
+  const word = pool[Math.floor(Math.random() * pool.length)];
+  room.usedWords.add(word.word);
+  return word;
 }
 
 function takeNextDrawer(room: GameRoom): PlayerSession | undefined {
@@ -226,27 +236,38 @@ function nextTurn(room: GameRoom) {
     if (!drawer) return;
   }
 
-  const word = pickWord(room.word);
-  room.phase = 'DRAWING';
+  // The drawer first decides: type their own word or let the server pick one.
+  room.phase = 'CHOOSING_WORD';
   room.currentDrawerId = drawer.id;
-  room.word = word;
+  room.word = null;
   room.strokes = [];
   room.roundPointsGained = {};
-  room.timeRemaining = room.roundDuration;
   for (const p of room.players.values()) p.hasGuessedCorrectly = false;
+  startCountdown(room, CHOOSE_WORD_SECONDS, () => startDrawing(room, pickWord(room)));
 
   broadcast(room, { action: 'CANVAS', strokes: [] });
-  systemChat(room, `--- Hiệp ${room.currentRound}/${room.totalRounds}: ${drawer.name} bắt đầu vẽ! ---`);
+  systemChat(room, `--- Hiệp ${room.currentRound}/${room.totalRounds}: ${drawer.name} đang chọn từ khóa... ---`);
   broadcastState(room);
+}
 
+function startCountdown(room: GameRoom, seconds: number, onExpire: () => void) {
+  room.timeRemaining = seconds;
   room.timer = setInterval(() => {
     room.timeRemaining--;
-    if (room.timeRemaining === Math.floor(room.roundDuration / 2)) {
-      systemChat(room, `💡 Gợi ý: ${word.hint}`);
-    }
     broadcast(room, { action: 'TICK', timeRemaining: room.timeRemaining });
-    if (room.timeRemaining <= 0) endTurn(room, 'Hết thời gian!');
+    if (room.timeRemaining <= 0) onExpire();
   }, 1000);
+}
+
+function startDrawing(room: GameRoom, word: WordItem) {
+  if (room.phase !== 'CHOOSING_WORD') return;
+  clearRoomTimers(room);
+  room.phase = 'DRAWING';
+  room.word = word;
+  startCountdown(room, room.roundDuration, () => endTurn(room, 'Hết thời gian!'));
+
+  systemChat(room, `${findPlayer(room, room.currentDrawerId)?.name} bắt đầu vẽ!`);
+  broadcastState(room);
 }
 
 function endTurn(room: GameRoom, reason: string) {
@@ -369,9 +390,15 @@ function leaveRoom(ws: WebSocket) {
 
   systemChat(room, `${player.name} đã rời phòng.`);
 
-  if ((room.phase === 'DRAWING' || room.phase === 'ROUND_SUMMARY') && room.players.size < 2) {
+  if (room.phase !== 'LOBBY' && room.phase !== 'GAME_OVER' && room.players.size < 2) {
     systemChat(room, 'Không đủ người chơi để tiếp tục.');
     endGame(room);
+    return;
+  }
+
+  if (room.phase === 'CHOOSING_WORD' && player.id === room.currentDrawerId) {
+    systemChat(room, 'Người vẽ đã thoát! Chuyển sang lượt tiếp theo.');
+    nextTurn(room);
     return;
   }
 
@@ -423,6 +450,7 @@ function handleMessage(ws: WebSocket, msg: ClientMessage) {
       currentDrawerId: null,
       drawQueue: [],
       word: null,
+      usedWords: new Set(),
       strokes: [],
       roundPointsGained: {},
       players: new Map(),
@@ -483,6 +511,20 @@ function handleMessage(ws: WebSocket, msg: ClientMessage) {
     case 'CHAT_GUESS': {
       const text = cleanText(msg.text, 100);
       if (text) handleGuess(ws, room, player, text);
+      return;
+    }
+    case 'CHOOSE_WORD': {
+      if (room.phase !== 'CHOOSING_WORD' || player.id !== room.currentDrawerId) return;
+      if (msg.mode === 'custom') {
+        const word = cleanCustomWord(msg.word);
+        if (!word) {
+          send(ws, { action: 'ERROR', message: 'Từ khóa chỉ gồm chữ cái và khoảng trắng, dài 2–30 ký tự.' });
+          return;
+        }
+        startDrawing(room, { word, category: CUSTOM_WORD_CATEGORY });
+      } else {
+        startDrawing(room, pickWord(room));
+      }
       return;
     }
     case 'PLAY_AGAIN':
